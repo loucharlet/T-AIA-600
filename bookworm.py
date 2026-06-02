@@ -6,6 +6,7 @@ Project Gutenberg book #11
 from collections import Counter
 import urllib.request
 import re
+import sys
 
 
 def get_book(book_id):
@@ -54,8 +55,17 @@ def lexdiv(text):
     return result
 
 
-text = get_book(11)
 
-result = lexdiv(text)
+if len(sys.argv) != 3:
+    print("Usage: python3 bookworm.py --lexdiv <book_id>")
+    sys.exit(1)
 
-print(result)
+option = sys.argv[1]
+book_id = sys.argv[2]
+
+if option == "--lexdiv":
+    text = get_book(book_id)
+    result = lexdiv(text)
+    print(result)
+else:
+    print("Unknown option")
