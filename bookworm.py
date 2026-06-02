@@ -7,6 +7,7 @@ from collections import Counter
 import urllib.request
 import re
 import sys
+import spacy
 
 
 def get_book(book_id):
@@ -55,6 +56,30 @@ def lexdiv(text):
     return result
 
 
+def entities(text):
+
+    nlp = spacy.load("en_core_web_sm")
+
+    characters = []
+    locations = []
+
+    for i in range(0, len(text), 100000):
+        doc = nlp(text[i:i + 100000])
+
+        for ent in doc.ents:
+
+            if ent.label_ == "PERSON":
+                characters.append(ent.text.strip())
+
+            if ent.label_ in ["GPE", "LOC"]:
+                locations.append(ent.text.strip())
+
+    result = {
+        "characters": sorted(set(characters)),
+        "locations": sorted(set(locations))
+    }
+
+    return result
 
 if len(sys.argv) != 3:
     print("Usage: python3 bookworm.py --lexdiv <book_id>")
@@ -67,5 +92,11 @@ if option == "--lexdiv":
     text = get_book(book_id)
     result = lexdiv(text)
     print(result)
+
+elif option == "--entities":
+    text = get_book(book_id)
+    result = entities(text)
+    print(result)
+
 else:
     print("Unknown option")
