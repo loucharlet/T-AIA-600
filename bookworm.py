@@ -16,9 +16,20 @@ import re
 import sys
 import spacy
 import nltk
+from nltk.stem import PorterStemmer, WordNetLemmatizer
 
 nltk.download("stopwords", quiet=True)
 nltk.download("wordnet", quiet=True)
+
+'''global model cache'''
+_NLP_MODEL = None
+_TFIDF_VECTORIZER = None
+
+def get_nlp_model():
+    global _NLP_MODEL
+    if _NLP_MODEL is None:
+        _NLP_MODEL = spacy.load("en_core_web_sm")
+    return _NLP_MODEL
 
 BOOKS = {
     "11":   {"title": "Alice's Adventures in Wonderland",     "author": "Lewis Carroll"},
@@ -116,7 +127,7 @@ def lexdiv(text):
 
 def entities(text):
 
-    nlp = spacy.load("en_core_web_sm")
+    nlp = get_nlp() 
 
     characters = []
     locations = []
