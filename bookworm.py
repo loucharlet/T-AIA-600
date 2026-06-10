@@ -187,21 +187,140 @@ def topics(text):
 
     return result
 
+BAD_ENTITY_WORDS = {
+    "chapter", "ebook", "project", "gutenberg", "illustration",
+    "contents", "copyright", "release", "language", "title"
+}
+
+BAD_TOPIC_WORDS = {
+    "said", "alice", "would", "could", "little", "like", "went",
+    "came", "come", "looked", "thought", "know", "time", "one"
+}
+
+def clean_entity_name(name):
+    name = re.sub(r"\s+", " ", name).strip()
+    name = re.sub(r"[^A-Za-z\s'\-]", "", name).strip()
+    return name
+
+def ranked_entities(text):
+    nlp = get_nlp_model()
+    persons = Counter()
+    places = Counter()
+
+    for i in range(0, len(text), 100000):
+        doc = nlp(text[i:i + 100000])
+
+        for ent in doc.ents:
+            name = clean_entity_name(ent.text)
+            low = name.lower()
+
+            if len(name) < 3:
+                continue
+            if any(bad in low for bad in BAD_ENTITY_WORDS):
+                continue
+
+            if ent.label_ == "PERSON":
+                persons[name] += 1
+            elif ent.label_ in ["GPE", "LOC", "FAC"]:
+                places[name] += 1
+
+    return {
+        "characters": [name for name, _ in persons.most_common(10)],
+        "locations": [name for name, _ in places.most_common(10)]
+    }
+
+def clean_topics(topic_data):
+    result = []
+    for words in topic_data.values():
+        for word in words:
+            word = word.lower()
+            if word not in BAD_TOPIC_WORDS and len(word) > 3:
+                result.append(word)
+    return list(dict.fromkeys(result))
+
+def get_book_header_info(text, book_id):
+    header = text[:5000]
+
+    title_match = re.search(r"^Title:\s*(.+)$", header, re.MULTILINE)
+    author_match = re.search(r"^Author:\s*(.+)$", header, re.MULTILINE)
+
+    title = (
+        title_match.group(1).strip()
+        if title_match
+        else BOOKS.get(book_id, {}).get("title", "Unknown title")
+    )
+
+    author = (
+        author_match.group(1).strip()
+        if author_match
+        else BOOKS.get(book_id, {}).get("author", "Unknown author")
+    )
+
+    return title, author, None
+
+def pick_item(items, index, fallback):
+    if items and len(items) > index:
+        return items[index]
+    return fallback
+
+def book_genre(book_id):
+    children = {"11", "12", "16", "55", "113", "120", "236"}
+    mystery = {"108", "834", "863", "1661", "61262", "69087", "70114"}
+    scifi = {"35", "36", "84", "159", "164", "345", "68283"}
+
+    if book_id in children:
+        return "children"
+    if book_id in mystery:
+        return "mystery"
+    if book_id in scifi:
+        return "scifi"
+    return "general"
+
 def summarize(text, book_id):
-    import random
     clean = strip_gutenberg(text)
+    title, author, release = get_book_header_info(text, book_id)
 
-    # Quelques templates génériques sans NER
-    title = BOOKS.get(book_id, {}).get("title", "this book")
-    author = BOOKS.get(book_id, {}).get("author", "the author")
+    entity_data = ranked_entities(clean)
+    topic_data = topics(clean)
 
-    templates = [
-        f"In {title} by {author}, the protagonist embarks on an unexpected adventure full of twists.",
-        f"{title} by {author} follows a remarkable journey through strange and wonderful places.",
-        f"A classic tale by {author}, {title} explores themes of identity, curiosity, and discovery.",
-    ]
-    return random.choice(templates)
+    characters = entity_data["characters"]
+    locations = entity_data["locations"]
+    topic_words = clean_topics(topic_data)
 
+    char1 = pick_item(characters, 0, "the main character")
+    char2 = pick_item(characters, 1, "another important character")
+    place = pick_item(locations, 0, "an important setting")
+    theme1 = pick_item(topic_words, 0, "adventure")
+    theme2 = pick_item(topic_words, 1, "conflict")
+
+    genre = book_genre(book_id)
+
+    templates = {
+        "children": (
+            f'"{title}" is a children and young adult book written by {author}. '
+            f'The story follows {char1}, who moves through {place} and meets {char2}. '
+            f'The book is shaped by themes such as {theme1} and {theme2}, creating a playful and imaginative journey.'
+        ),
+        "mystery": (
+            f'"{title}" is a crime and mystery book written by {author}. '
+            f'The story follows {char1}, connected with {char2}, through events linked to {theme1} and {theme2}. '
+            f'The setting of {place} helps create a tense atmosphere built around clues, conflict, and investigation.'
+        ),
+        "scifi": (
+            f'"{title}" is a science-fiction or fantasy book written by {author}. '
+            f'The story follows {char1} through {place}, where unusual events involve {theme1} and {theme2}. '
+            f'Through these elements, the book builds a speculative world shaped by danger, discovery, and transformation.'
+        ),
+        "general": (
+            f'"{title}" was written by {author}. '
+            f'The story follows {char1}, with important figures such as {char2}, around {place}. '
+            f'Its main themes include {theme1} and {theme2}, giving a compact overview of the book.'
+        )
+    }
+
+    return templates.get(genre, templates["general"])
+
+    
 def main():
     parser = argparse.ArgumentParser(description="bookworm — analyse NLP de livres Gutenberg")
     parser.add_argument("--lexdiv",    metavar="book_id")
