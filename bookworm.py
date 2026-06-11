@@ -3,9 +3,6 @@ Lexical diversity metrics
 Project Gutenberg book #11
 """
 
-from sumy.parsers.plaintext import PlaintextParser
-from sumy.nlp.tokenizers import Tokenizer
-from sumy.summarizers.lsa import LsaSummarizer
 from nltk.corpus import stopwords
 from collections import Counter
 from pathlib import Path
@@ -26,7 +23,6 @@ nltk.download("wordnet", quiet=True)
 
 '''global model cache'''
 _NLP_MODEL = None
-_TFIDF_VECTORIZER = None
 
 def get_nlp_model():
     global _NLP_MODEL
