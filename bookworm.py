@@ -9,6 +9,9 @@ from sumy.summarizers.lsa import LsaSummarizer
 from nltk.corpus import stopwords
 from collections import Counter
 from pathlib import Path
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 import urllib.request
 import argparse
 import pickle
@@ -47,7 +50,13 @@ BOOKS = {
     "84":   {"title": "Frankenstein",                          "author": "Mary Shelley"},
     "164":  {"title": "Twenty Thousand Leagues under the Sea", "author": "Jules Verne"},
     "345":  {"title": "Dracula",                               "author": "Bram Stoker"},
-}
+    "834":   {"title": "The Memoirs of Sherlock Holmes",          "author": "Arthur Conan Doyle"},
+    "61262": {"title": "Poirot Investigates",                     "author": "Agatha Christie"},
+    "69087": {"title": "The Murder of Roger Ackroyd",             "author": "Agatha Christie"},
+    "70114": {"title": "The Big Four",                            "author": "Agatha Christie"},
+    "159":   {"title": "The Island of Doctor Moreau",             "author": "H.G. Wells"},
+    "68283": {"title": "The Call of Cthulhu",                     "author": "H.P. Lovecraft"}
+    }
 
 # dossiers pour le cache
 BOOKS_DIR = Path("BOOKS")   # textes téléchargés
@@ -272,12 +281,70 @@ def summarize(text, book_id):
         f'{element1}, {element2} and {element3}.'
     )
 
+
+def similar(book_id):
+    """Retourne les 5 livres les plus similaires selon TF-IDF + cosine similarity."""
+
+    if book_id not in BOOKS:
+        raise ValueError(f"Livre {book_id} inconnu")
+
+    book_ids = []
+    texts = []
+
+    for current_id in BOOKS:
+        try:
+            text = get_book(current_id)
+            text = strip_gutenberg(text)
+            text = text.lower()
+            text = re.sub(r"[^a-z\s]", " ", text)
+
+            book_ids.append(current_id)
+            texts.append(text)
+
+        except Exception:
+            # Si un livre ne se télécharge pas, on l'ignore
+            continue
+
+    vectorizer = TfidfVectorizer(
+        stop_words="english",
+        max_features=1000,
+        min_df=1,
+        max_df=0.9
+    )
+
+    tfidf_matrix = vectorizer.fit_transform(texts)
+
+    target_index = book_ids.index(book_id)
+
+    scores = cosine_similarity(
+        tfidf_matrix[target_index],
+        tfidf_matrix
+    )[0]
+
+    ranked_indexes = np.argsort(scores)[::-1]
+
+    result = []
+
+    for index in ranked_indexes:
+        current_id = book_ids[index]
+
+        if current_id == book_id:
+            continue
+
+        result.append(BOOKS[current_id]["title"])
+
+        if len(result) == 5:
+            break
+
+    return result
+
 def main():
     parser = argparse.ArgumentParser(description="bookworm — analyse NLP de livres Gutenberg")
     parser.add_argument("--lexdiv",    metavar="book_id")
     parser.add_argument("--entities",  metavar="book_id")
     parser.add_argument("--topics",    metavar="book_id")
     parser.add_argument("--summarize", metavar="book_id")
+    parser.add_argument("--similar", metavar="book_id")
 
     args = parser.parse_args()
 
@@ -285,6 +352,7 @@ def main():
     elif args.entities:  option, book_id = "entities",  args.entities
     elif args.topics:    option, book_id = "topics",    args.topics
     elif args.summarize: option, book_id = "summarize", args.summarize
+    elif args.similar: option, book_id = "similar", args.similar
     else:
         parser.print_help()
         sys.exit(1)
@@ -306,6 +374,7 @@ def main():
         elif option == "entities":  result = entities(text)
         elif option == "topics":    result = topics(text)
         elif option == "summarize": result = summarize(text, book_id)
+        elif option == "similar": result = similar(book_id)
     except Exception as e:
         print(f"Erreur : {e}")
         sys.exit(1)
