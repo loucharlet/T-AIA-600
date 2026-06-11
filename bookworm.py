@@ -11,6 +11,7 @@ from collections import Counter
 from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from nltk.stem import PorterStemmer, WordNetLemmatizer
 import numpy as np
 import urllib.request
 import argparse
@@ -19,7 +20,6 @@ import re
 import sys
 import spacy
 import nltk
-from nltk.stem import PorterStemmer, WordNetLemmatizer
 
 nltk.download("stopwords", quiet=True)
 nltk.download("wordnet", quiet=True)
@@ -59,10 +59,10 @@ BOOKS = {
     }
 
 # dossiers pour le cache
-BOOKS_DIR = Path("BOOKS")   # textes téléchargés
-CACHE_DIR  = Path("cache")  # résultats calculés
+BOOKS_DIR = Path("BOOKS")   
+CACHE_DIR  = Path("cache")  
 
-BOOKS_DIR.mkdir(exist_ok=True)  # crée si n'existe pas
+BOOKS_DIR.mkdir(exist_ok=True) 
 CACHE_DIR.mkdir(exist_ok=True)
 
 
@@ -83,7 +83,7 @@ def get_book(book_id):
     book_file = BOOKS_DIR / f"{book_id}.txt"
 
     if book_file.exists():
-        return book_file.read_text(encoding="utf-8")  # déjà téléchargé
+        return book_file.read_text(encoding="utf-8")  #déjà téléchargé
 
     print(f"Téléchargement du livre {book_id}...")
     url = f"https://www.gutenberg.org/files/{book_id}/{book_id}-0.txt"
@@ -186,6 +186,42 @@ def strip_gutenberg(text):
         if end2:
             text = text[:end2.start()]
     return text.strip()
+
+
+
+def tokenize(text):
+    """NLP PIPELINE:Tokenize text: lowercase, remove non-letters, split into words."""
+    text = text.lower()
+    text = re.sub(r"[^a-z\s]", " ", text)
+    tokens = text.split()
+    return tokens
+
+
+def remove_stopwords(tokens):
+    """NLP PIPELINE:Remove English stopwords from token list."""
+    stop_words = set(stopwords.words("english"))
+    return [token for token in tokens if token not in stop_words]
+
+
+def normalize(tokens, method="lemmatize"):
+    """Normalize tokens using stemming or lemmatization.
+    """
+    if method == "stem":
+        stemmer = PorterStemmer()
+        return [stemmer.stem(token) for token in tokens]
+    else:
+        lemmatizer = WordNetLemmatizer()
+        return [lemmatizer.lemmatize(token) for token in tokens]
+
+
+def preprocess(text):
+    """ NLP pipeline complète"""
+    text = strip_gutenberg(text)
+    tokens = tokenize(text)
+    tokens = remove_stopwords(tokens)
+    tokens = normalize(tokens, method="lemmatize")
+    return tokens
+
 
 def topics(text):
     """Divise le texte en 4 sections et extrait les 10 mots-clés de chaque section
