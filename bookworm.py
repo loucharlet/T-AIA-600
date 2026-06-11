@@ -136,7 +136,7 @@ def lexdiv(text):
 
 def entities(text):
 
-    nlp = get_nlp_model() 
+    nlp = get_nlp_model()
 
     characters = []
     locations = []
@@ -146,11 +146,26 @@ def entities(text):
 
         for ent in doc.ents:
 
-            if ent.label_ == "PERSON":
-                characters.append(ent.text.strip())
+            name = ent.text.strip()
 
-            if ent.label_ in ["GPE", "LOC"]:
-                locations.append(ent.text.strip())
+            # filtres anti-déchets
+            if len(name) < 3:
+                continue
+
+            if "CHAPTER" in name.upper():
+                continue
+
+            if "\n" in name:
+                continue
+
+            if name.lower() in ["said", "chapter"]:
+                continue
+
+            if ent.label_ == "PERSON":
+                characters.append(name)
+
+            elif ent.label_ in ["GPE", "LOC"]:
+                locations.append(name)
 
     result = {
         "characters": sorted(set(characters)),
@@ -338,6 +353,41 @@ def similar(book_id):
 
     return result
 
+def get_bookshelf(text):
+
+    header = text[:5000]
+
+    match = re.search(
+        r"Bookshelves:\s*(.+)",
+        header,
+        re.IGNORECASE
+    )
+
+    if match:
+        return match.group(1).strip()
+
+    return "Unknown"
+
+def card(book_id):
+
+    text = get_book(book_id)
+
+    result = {
+        "info": {
+            "id": book_id,
+            "authors": BOOKS.get(book_id, {}).get("author", "Unknown"),
+            "bookshelves": get_bookshelf(text)
+        },
+        "lexdiv": lexdiv(text),
+        "topics": topics(text),
+        "entities": entities(text),
+        "summary": summarize(text, book_id),
+        "similar": similar(book_id)
+    }
+
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description="bookworm — analyse NLP de livres Gutenberg")
     parser.add_argument("--lexdiv",    metavar="book_id")
@@ -345,6 +395,7 @@ def main():
     parser.add_argument("--topics",    metavar="book_id")
     parser.add_argument("--summarize", metavar="book_id")
     parser.add_argument("--similar", metavar="book_id")
+    parser.add_argument("--card", metavar="book_id")
 
     args = parser.parse_args()
 
@@ -353,6 +404,7 @@ def main():
     elif args.topics:    option, book_id = "topics",    args.topics
     elif args.summarize: option, book_id = "summarize", args.summarize
     elif args.similar: option, book_id = "similar", args.similar
+    elif args.card: option, book_id = "card", args.card
     else:
         parser.print_help()
         sys.exit(1)
@@ -375,6 +427,8 @@ def main():
         elif option == "topics":    result = topics(text)
         elif option == "summarize": result = summarize(text, book_id)
         elif option == "similar": result = similar(book_id)
+        elif option == "card":
+            result = card(book_id)
     except Exception as e:
         print(f"Erreur : {e}")
         sys.exit(1)
